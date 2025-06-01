@@ -10,7 +10,7 @@ from pathlib import Path
 # Cấu hình trang
 st.set_page_config(
     page_title="Dashboard Báo Cáo Hành Chính - Pivot Table",
-    page_icon="📊",
+    page_icon="🏥",  # Logo emoji
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -1268,9 +1268,96 @@ class PivotTableDashboard:
             return None
 
 def main():
-    st.title("📊 Dashboard Báo Cáo Hành Chính - Phòng Hành Chính")
-    st.markdown("### 🎯 Với thứ tự ưu tiên cố định và biến động inline")
+    # HEADER VỚI LOGO THẬT
+    col1, col2, col3 = st.columns([1, 3, 1])
+    
+    with col2:
+        # Tự động tìm đường dẫn đúng
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(script_dir, "assets", "logo.png")
+        
+        # Hiển thị logo từ file
+        try:
+            if os.path.exists(logo_path):
+                # Header với logo căn giữa
+                st.markdown("""
+                <div style='text-align: center; padding: 30px 0;'>
+                """, unsafe_allow_html=True)
+                
+                # Logo to hơn, căn giữa
+                col_left, col_center, col_right = st.columns([1, 1, 1])
+                with col_center:
+                    st.image(logo_path, width=150)  # Logo to hơn nữa
+                
+                # Title căn giữa, đơn giản
+                st.markdown("""
+                    <div style='text-align: center; margin-top: 20px;'>
+                        <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
+                            DASHBOARD PHÒNG HÀNH CHÍNH
+                        </h1>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Fallback nếu không có logo - header đẹp với emoji
+                st.markdown("""
+                <div style='text-align: center; padding: 30px 0;'>
+                    <div style='font-size: 5rem; margin-bottom: 20px;'>🏥</div>
+                    <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
+                        DASHBOARD PHÒNG HÀNH CHÍNH
+                    </h1>
+                </div>
+                """, unsafe_allow_html=True)
+        except Exception as e:
+            # Nếu có lỗi, dùng emoji logo đẹp
+            st.markdown("""
+            <div style='text-align: center; padding: 30px 0;'>
+                <div style='font-size: 5rem; margin-bottom: 20px;'>🏥</div>
+                <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
+                    DASHBOARD PHÒNG HÀNH CHÍNH
+                </h1>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Subtitle chung
+        st.markdown("""
+        <div style='text-align: center;'>
+            <p style='color: #888; font-style: italic; margin-top: 10px;'>
+                📊 Với thứ tự ưu tiên cố định và biến động inline
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Thêm thông tin project
+    with st.expander("ℹ️ Thông tin về Dashboard", expanded=False):
+        st.markdown("""
+        **🏥 Dashboard chuyên biệt cho Phòng Hành Chính Bệnh viện**
+        
+        **✨ Tính năng nổi bật:**
+        - 📋 13 danh mục và 70+ nội dung theo thứ tự ưu tiên cố định
+        - 📈 Hiển thị biến động tuần (%) ngay trong giá trị: `1.234.567 (↑15%)`
+        - 🔒 Cột "Nội dung" và "Tổng" đóng băng khi scroll
+        - 📊 Sparkline xu hướng cho từng danh mục
+        - 💾 Xuất báo cáo Excel đa sheet và CSV
+        
+        **👨‍💻 Phát triển bởi:** Dương Hữu Quang - Phòng Hành Chính
+        **📅 Phiên bản:** 1.0 - 2025
+        **🌐 GitHub:** https://github.com/corner-25/dashboard-phong-hanh-chinh
+        """)
+    
+    # Footer chuyên nghiệp
     st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666; padding: 15px; background-color: #f8f9fa; border-radius: 10px; margin-top: 20px;'>
+        <p style='margin: 0; font-size: 14px;'>
+            🏥 <strong>Phòng Hành Chính - Bệnh Viện</strong> | 
+            🌐 <a href="https://github.com/corner-25/dashboard-phong-hanh-chinh" target="_blank" style="text-decoration: none; color: #1f77b4;">GitHub Project</a>
+        </p>
+        <p style='margin: 5px 0 0 0; font-size: 12px; color: #888;'>
+            © 2025 Dashboard Phòng Hành Chính - Phát triển bởi <strong>Dương Hữu Quang</strong>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Khởi tạo dashboard
     dashboard = PivotTableDashboard()
@@ -1296,8 +1383,8 @@ def main():
         # Nhập đường dẫn file
         file_path = st.sidebar.text_input(
             "Đường dẫn file Excel",
-            value="/Users/quang/Documents/Zalo Received Files/Du lieu bao cao Tuan PHC_2025.xlsx (du lieu that).xlsx",
-            help="Ví dụ: /Users/name/Documents/file.xlsx"
+            value="",
+            help="Để trống và sử dụng Upload file ở trên"
         )
         
         if st.sidebar.button("Tải file", use_container_width=True):
