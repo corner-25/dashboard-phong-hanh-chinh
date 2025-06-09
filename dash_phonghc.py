@@ -2460,6 +2460,18 @@ def weekly_dashboard_main():
     """, unsafe_allow_html=True)
     
 
-# Cuối file
+# Cuối file - sửa phần này
 if __name__ == "__main__":
-    weekly_dashboard_main()
+    # Thêm sidebar để chọn mode
+    st.sidebar.title("🎛️ Chọn chế độ")
+    
+    mode = st.sidebar.radio(
+        "Chế độ hoạt động:",
+        ["📊 Dashboard chính", "📅 Weekly Upload"],
+        index=0  # Mặc định là Dashboard chính
+    )
+    
+    if mode == "📊 Dashboard chính":
+        main()  # Chạy dashboard chính
+    else:
+        weekly_dashboard_main()  # Chạy weekly upload
