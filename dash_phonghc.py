@@ -1662,65 +1662,61 @@ class PivotTableDashboard:
             return None
 
 def main():
-    # HEADER VỚI LOGO THẬT
-    col1, col2, col3 = st.columns([1, 3, 1])
+    # HEADER VỚI LOGO THẬT - CĂNG GIỮA HOÀN HẢO
+    st.markdown("""
+    <div style='text-align: center; padding: 30px 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 15px; margin-bottom: 30px;'>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        # Tự động tìm đường dẫn đúng
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        logo_path = os.path.join(script_dir, "assets", "logo.png")
-        
-        # Hiển thị logo từ file
-        try:
-            if os.path.exists(logo_path):
-                # Header với logo căn giữa
-                st.markdown("""
-                <div style='text-align: center; padding: 30px 0;'>
-                """, unsafe_allow_html=True)
-                
-                # Logo to hơn, căn giữa
-                col_left, col_center, col_right = st.columns([1, 1, 1])
-                with col_center:
-                    st.image(logo_path, width=150)  # Logo to hơn nữa
-                
-                # Title căn giữa, đơn giản
-                st.markdown("""
-                    <div style='text-align: center; margin-top: 20px;'>
-                        <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
-                            DASHBOARD PHÒNG HÀNH CHÍNH
-                        </h1>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                # Fallback nếu không có logo - header đẹp với emoji
-                st.markdown("""
-                <div style='text-align: center; padding: 30px 0;'>
-                    <div style='font-size: 5rem; margin-bottom: 20px;'>🏥</div>
-                    <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
-                        DASHBOARD PHÒNG HÀNH CHÍNH
-                    </h1>
-                </div>
-                """, unsafe_allow_html=True)
-        except Exception as e:
-            # Nếu có lỗi, dùng emoji logo đẹp
-            st.markdown("""
-            <div style='text-align: center; padding: 30px 0;'>
-                <div style='font-size: 5rem; margin-bottom: 20px;'>🏥</div>
-                <h1 style='color: #1f77b4; margin: 0; font-size: 3rem; font-weight: bold;'>
-                    DASHBOARD PHÒNG HÀNH CHÍNH
-                </h1>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Subtitle chung
-        st.markdown("""
-        <div style='text-align: center;'>
-            <p style='color: #888; font-style: italic; margin-top: 10px;'>
-                📊 Với thứ tự ưu tiên cố định và biến động inline
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+    # Tự động tìm đường dẫn đúng
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(script_dir, "assets", "logo.png")
+    
+    # Hiển thị logo từ file - CĂNG GIỮA HOÀN HẢO
+    try:
+        if os.path.exists(logo_path):
+            # Container căn giữa cho logo
+            logo_col1, logo_col2, logo_col3 = st.columns([1, 1, 1])
+            with logo_col2:
+                st.image(logo_path, width=180, use_column_width=False)
+        else:
+            # Fallback emoji logo
+            st.markdown("<div style='font-size: 6rem; text-align: center; margin: 20px 0;'>🏥</div>", unsafe_allow_html=True)
+    except Exception as e:
+        # Fallback emoji logo
+        st.markdown("<div style='font-size: 6rem; text-align: center; margin: 20px 0;'>🏥</div>", unsafe_allow_html=True)
+    
+    # Title căn giữa hoàn hảo
+    st.markdown("""
+        <h1 style='
+            text-align: center; 
+            color: #1f77b4; 
+            margin: 20px 0 10px 0; 
+            font-size: 3.2rem; 
+            font-weight: bold;
+            font-family: "Segoe UI", Arial, sans-serif;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            letter-spacing: 1px;
+        '>
+            DASHBOARD PHÒNG HÀNH CHÍNH
+        </h1>
+    """, unsafe_allow_html=True)
+    
+    # Subtitle căn giữa
+    st.markdown("""
+        <p style='
+            text-align: center; 
+            color: #666; 
+            font-style: italic; 
+            margin: 10px 0 0 0;
+            font-size: 1.1rem;
+            font-weight: 300;
+        '>
+            📊 Với thứ tự ưu tiên cố định và biến động inline
+        </p>
+    """, unsafe_allow_html=True)
+    
+    # Đóng container
+    st.markdown("</div>", unsafe_allow_html=True)
     
     # Thêm thông tin project
     with st.expander("ℹ️ Thông tin về Dashboard", expanded=False):
