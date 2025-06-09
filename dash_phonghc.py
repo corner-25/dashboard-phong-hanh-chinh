@@ -1701,20 +1701,6 @@ def main():
         </h1>
     """, unsafe_allow_html=True)
     
-    # Subtitle căn giữa
-    st.markdown("""
-        <p style='
-            text-align: center; 
-            color: #666; 
-            font-style: italic; 
-            margin: 10px 0 0 0;
-            font-size: 1.1rem;
-            font-weight: 300;
-        '>
-            📊 Với thứ tự ưu tiên cố định và biến động inline
-        </p>
-    """, unsafe_allow_html=True)
-    
     # Đóng container
     st.markdown("</div>", unsafe_allow_html=True)
     
