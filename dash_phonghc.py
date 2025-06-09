@@ -639,6 +639,8 @@ class PivotTableDashboard:
             st.error(f"Lỗi khi đọc file: {str(e)}")
             return False
     
+    
+    
     def _apply_priority_order(self):
         """Áp dụng thứ tự ưu tiên cho danh mục và nội dung"""
         # Thêm cột thứ tự ưu tiên cho danh mục
@@ -2154,7 +2156,7 @@ def main():
             """)
 
 def weekly_dashboard_main():
-    """Main function cho weekly upload dashboard"""
+    """Main function cho weekly upload dashboard - Robust version"""
     
     # Initialize manager
     if 'weekly_manager' not in st.session_state:
@@ -2177,60 +2179,170 @@ def weekly_dashboard_main():
     if connected:
         st.success(status_msg)
         
-        # Current data status
-        current_data, metadata = manager.load_current_data()
+        # Current data status - WRAP IN TRY-CATCH
+        try:
+            current_data, metadata = manager.load_current_data()
+            
+            if current_data is not None and metadata:
+                st.info(f"""
+                📊 **File hiện tại:**
+                - 📄 {metadata.get('filename', 'Unknown')}
+                - 📅 Tuần {metadata.get('week_number', '?')}/{metadata.get('year', '?')}
+                - ⏰ {metadata.get('upload_time', '')[:19]}
+                - 📈 {metadata.get('row_count', 0):,} dòng
+                """)
+                
+                # Load dashboard với dữ liệu hiện tại - WRAP IN TRY-CATCH
+                try:
+                    dashboard = PivotTableDashboard()
+                    
+                    # Kiểm tra cấu trúc dữ liệu trước khi load
+                    required_cols = ['Tuần', 'Tháng', 'Danh mục', 'Nội dung', 'Số liệu']
+                    missing_cols = [col for col in required_cols if col not in current_data.columns]
+                    
+                    if missing_cols:
+                        st.warning(f"⚠️ Dữ liệu hiện tại thiếu cột: {missing_cols}")
+                        st.info("Vẫn có thể upload file mới bên dưới")
+                    else:
+                        # Sử dụng hàm load_data_from_dataframe
+                        if hasattr(dashboard, 'load_data_from_dataframe'):
+                            if dashboard.load_data_from_dataframe(current_data):
+                                st.markdown("### 📊 Dashboard Báo Cáo Hành Chính")
+                                
+                                # Basic pivot table
+                                pivot = dashboard.create_hierarchical_pivot_table_with_ratio(
+                                    dashboard.data, ['Danh mục', 'Nội dung'], ['Tuần'], 'Số liệu', 'sum', True
+                                )
+                                
+                                if pivot is not None:
+                                    dashboard.display_hierarchical_pivot_improved(pivot, dashboard.data)
+                            else:
+                                st.error("❌ Lỗi khi xử lý dữ liệu hiện tại")
+                        else:
+                            # Fallback: gán trực tiếp nhưng không áp dụng priority
+                            st.warning("⚠️ Hiển thị dữ liệu cơ bản (chưa có thứ tự ưu tiên)")
+                            st.dataframe(current_data.head(10))
+                            
+                except Exception as dashboard_error:
+                    st.error(f"❌ Lỗi hiển thị dashboard: {str(dashboard_error)}")
+                    st.info("💡 Bạn vẫn có thể upload file mới bên dưới")
+                    
+                    # Hiển thị dữ liệu thô nếu có lỗi
+                    with st.expander("🔍 Xem dữ liệu thô"):
+                        st.dataframe(current_data.head())
+            
+            else:
+                st.warning("📭 Chưa có dữ liệu. Upload file Excel đầu tiên!")
+                
+        except Exception as data_error:
+            st.error(f"❌ Lỗi tải dữ liệu hiện tại: {str(data_error)}")
+            st.info("💡 Bạn vẫn có thể upload file mới bên dưới")
         
-        if current_data is not None and metadata:
-            st.info(f"""
-            📊 **File hiện tại:**
-            - 📄 {metadata.get('filename', 'Unknown')}
-            - 📅 Tuần {metadata.get('week_number', '?')}/{metadata.get('year', '?')}
-            - ⏰ {metadata.get('upload_time', '')[:19]}
-            - 📈 {metadata.get('row_count', 0):,} dòng
-            """)
-            
-            # Load dashboard với dữ liệu hiện tại
-            dashboard = PivotTableDashboard()
-            dashboard.data = current_data
-            dashboard._apply_priority_order()
-            dashboard._calculate_week_over_week_ratio()
-            
-            # Simple dashboard display
-            st.markdown("### 📊 Dashboard Báo Cáo Hành Chính")
-            
-            # Basic pivot table
-            pivot = dashboard.create_hierarchical_pivot_table_with_ratio(
-                dashboard.data, ['Danh mục', 'Nội dung'], ['Tuần'], 'Số liệu', 'sum', True
-            )
-            
-            if pivot is not None:
-                dashboard.display_hierarchical_pivot_improved(pivot, dashboard.data)
-        
-        else:
-            st.warning("📭 Chưa có dữ liệu. Upload file Excel đầu tiên!")
-        
-        # Upload section
+        # Upload section - LUÔN HIỂN THỊ
         st.markdown("---")
         st.markdown("### 📤 Upload File Excel")
         
-        uploaded_file = st.file_uploader("Chọn file Excel", type=['xlsx', 'xls'])
+        uploaded_file = st.file_uploader("Chọn file Excel", type=['xlsx', 'xls'], key="weekly_uploader")
         
         if uploaded_file is not None:
             try:
+                # Đọc file
                 data = pd.read_excel(uploaded_file)
                 st.success(f"✅ Đọc thành công {len(data):,} dòng dữ liệu")
                 
-                if st.button("🚀 UPLOAD VÀ LƯU", type="primary"):
-                    if manager.upload_new_file(data, uploaded_file.name):
-                        st.balloons()
-                        st.rerun()
+                # Hiển thị cấu trúc dữ liệu
+                with st.expander("🔍 Xem cấu trúc dữ liệu"):
+                    st.write("**Columns:**", list(data.columns))
+                    st.write("**Shape:**", data.shape)
+                    st.dataframe(data.head())
+                
+                # Kiểm tra cột bắt buộc
+                required_cols = ['Tuần', 'Tháng', 'Danh mục', 'Nội dung', 'Số liệu']
+                missing_cols = [col for col in required_cols if col not in data.columns]
+                
+                if missing_cols:
+                    st.error(f"❌ Thiếu cột bắt buộc: {missing_cols}")
+                    st.info("Vui lòng đảm bảo file Excel có đủ các cột: Tuần, Tháng, Danh mục, Nội dung, Số liệu")
+                else:
+                    st.success("✅ Dữ liệu hợp lệ, có thể upload!")
+                    
+                    # Nút upload
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        if st.button("🚀 UPLOAD VÀ LƯU", type="primary", use_container_width=True):
+                            try:
+                                with st.spinner("Đang upload..."):
+                                    success = manager.upload_new_file(data, uploaded_file.name)
+                                    
+                                if success:
+                                    st.balloons()
+                                    st.success("🎉 Upload thành công!")
+                                    # Đợi một chút trước khi rerun
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Upload thất bại!")
+                                    
+                            except Exception as upload_error:
+                                st.error(f"❌ Lỗi upload: {str(upload_error)}")
+                                st.info("💡 Vui lòng thử lại hoặc kiểm tra kết nối mạng")
+                    
+                    with col2:
+                        if st.button("🔄 Reset Form", use_container_width=True):
+                            st.rerun()
                         
-            except Exception as e:
-                st.error(f"❌ Lỗi đọc file: {str(e)}")
+            except Exception as file_error:
+                st.error(f"❌ Lỗi đọc file: {str(file_error)}")
+                st.info("💡 Vui lòng kiểm tra file Excel có đúng format không")
+                
+                # Hiển thị hướng dẫn format
+                with st.expander("📋 Format file Excel yêu cầu"):
+                    st.markdown("""
+                    **Các cột bắt buộc:**
+                    - `Tuần`: Số tuần (1-52)
+                    - `Tháng`: Số tháng (1-12) 
+                    - `Danh mục`: Tên danh mục công việc
+                    - `Nội dung`: Mô tả chi tiết công việc
+                    - `Số liệu`: Giá trị số (có thể là 0)
+                    
+                    **Ví dụ:**
+                    ```
+                    Tuần | Tháng | Danh mục        | Nội dung                    | Số liệu
+                    1    | 1     | Văn bản đến     | Tổng số văn bản đến        | 150
+                    1    | 1     | Văn bản đến     | Xử lý đúng hạn             | 140
+                    ```
+                    """)
     
     else:
         st.error(status_msg)
         st.info("⚙️ Vui lòng cấu hình GitHub secrets trên Streamlit Cloud")
+        
+        # Hiển thị hướng dẫn cấu hình
+        with st.expander("🔧 Hướng dẫn cấu hình GitHub"):
+            st.markdown("""
+            **Cần thêm vào Secrets của Streamlit Cloud:**
+            
+            1. `github_token`: Personal Access Token với quyền `repo`
+            2. `github_owner`: Tên user/organization GitHub
+            3. `github_repo`: Tên repository
+            
+            **Ví dụ:**
+            ```
+            github_token = "ghp_xxxxxxxxxxxx"
+            github_owner = "your-username"  
+            github_repo = "your-repo-name"
+            ```
+            """)
+
+    # Footer luôn hiển thị
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666; padding: 10px;'>
+        <small>📅 Weekly Upload System - Tự động backup và cleanup</small>
+    </div>
+    """, unsafe_allow_html=True)
+    
 
 # Cuối file
 if __name__ == "__main__":
