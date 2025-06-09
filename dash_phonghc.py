@@ -2154,4 +2154,4 @@ def main():
             """)
 
 if __name__ == "__main__":
-    main()
+    weekly_dashboard_main()
