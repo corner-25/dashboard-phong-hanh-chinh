@@ -2153,5 +2153,85 @@ def main():
             - Biến động được tính so với tuần liền trước
             """)
 
+def weekly_dashboard_main():
+    """Main function cho weekly upload dashboard"""
+    
+    # Initialize manager
+    if 'weekly_manager' not in st.session_state:
+        st.session_state.weekly_manager = WeeklyUploadManager()
+    
+    manager = st.session_state.weekly_manager
+    
+    # Header
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
+                padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;'>
+        <h2 style='color: white; margin: 0;'>📅 Weekly Data Upload</h2>
+        <p style='color: #f0f0f0; margin: 10px 0 0 0;'>Upload 1 lần/tuần • Auto xóa file cũ • Giữ storage gọn nhẹ</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Connection status
+    connected, status_msg = manager.check_github_connection()
+    
+    if connected:
+        st.success(status_msg)
+        
+        # Current data status
+        current_data, metadata = manager.load_current_data()
+        
+        if current_data is not None and metadata:
+            st.info(f"""
+            📊 **File hiện tại:**
+            - 📄 {metadata.get('filename', 'Unknown')}
+            - 📅 Tuần {metadata.get('week_number', '?')}/{metadata.get('year', '?')}
+            - ⏰ {metadata.get('upload_time', '')[:19]}
+            - 📈 {metadata.get('row_count', 0):,} dòng
+            """)
+            
+            # Load dashboard với dữ liệu hiện tại
+            dashboard = PivotTableDashboard()
+            dashboard.data = current_data
+            dashboard._apply_priority_order()
+            dashboard._calculate_week_over_week_ratio()
+            
+            # Simple dashboard display
+            st.markdown("### 📊 Dashboard Báo Cáo Hành Chính")
+            
+            # Basic pivot table
+            pivot = dashboard.create_hierarchical_pivot_table_with_ratio(
+                dashboard.data, ['Danh mục', 'Nội dung'], ['Tuần'], 'Số liệu', 'sum', True
+            )
+            
+            if pivot is not None:
+                dashboard.display_hierarchical_pivot_improved(pivot, dashboard.data)
+        
+        else:
+            st.warning("📭 Chưa có dữ liệu. Upload file Excel đầu tiên!")
+        
+        # Upload section
+        st.markdown("---")
+        st.markdown("### 📤 Upload File Excel")
+        
+        uploaded_file = st.file_uploader("Chọn file Excel", type=['xlsx', 'xls'])
+        
+        if uploaded_file is not None:
+            try:
+                data = pd.read_excel(uploaded_file)
+                st.success(f"✅ Đọc thành công {len(data):,} dòng dữ liệu")
+                
+                if st.button("🚀 UPLOAD VÀ LƯU", type="primary"):
+                    if manager.upload_new_file(data, uploaded_file.name):
+                        st.balloons()
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"❌ Lỗi đọc file: {str(e)}")
+    
+    else:
+        st.error(status_msg)
+        st.info("⚙️ Vui lòng cấu hình GitHub secrets trên Streamlit Cloud")
+
+# Cuối file
 if __name__ == "__main__":
     weekly_dashboard_main()
