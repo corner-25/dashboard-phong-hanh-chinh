@@ -1727,7 +1727,7 @@ def main():
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 15px; background-color: #f8f9fa; border-radius: 10px; margin-top: 20px;'>
         <p style='margin: 0; font-size: 14px;'>
-            🏥 <strong>Phòng Hành Chính - Bệnh Viện Đại học Y Dược TPHCM </strong> | 
+            🏥 <strong>Phòng Hành Chính - Bệnh viện Đại học Y Dược TPHCM - University Medical Center HCMC (UMC) </strong> | 
             🌐 <a href="https://github.com/corner-25/dashboard-phong-hanh-chinh" target="_blank" style="text-decoration: none; color: #1f77b4;">GitHub Project</a>
         </p>
         <p style='margin: 5px 0 0 0; font-size: 12px; color: #888;'>
