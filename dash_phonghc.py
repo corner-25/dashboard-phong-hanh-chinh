@@ -2,15 +2,20 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import os
 from pathlib import Path
+import json
+import requests
+import base64
+import hashlib
+import time
 
 # Cấu hình trang
 st.set_page_config(
     page_title="Dashboard Báo Cáo Hành Chính - Pivot Table",
-    page_icon="🏥",  # Logo emoji
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -121,9 +126,361 @@ st.markdown("""
         font-family: 'Courier New', monospace;
         font-weight: bold;
     }
+    
+    /* Mobile optimizations */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 0.5rem;
+        }
+        
+        .stButton > button {
+            width: 100%;
+            margin: 2px 0;
+        }
+        
+        .stDataFrame {
+            font-size: 10px;
+        }
+    }
+    
+    /* Weekly upload specific styles */
+    .upload-header {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    
+    .upload-title {
+        color: white;
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin: 0;
+    }
+    
+    .upload-subtitle {
+        color: #f0f0f0;
+        font-size: 0.9rem;
+        margin: 10px 0 0 0;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .status-online { background-color: #28a745; }
+    .status-loading { background-color: #ffc107; }
+    .status-offline { background-color: #dc3545; }
 </style>
 """, unsafe_allow_html=True)
 
+# ================== WEEKLY UPLOAD MANAGER CLASS ==================
+class WeeklyUploadManager:
+    """
+    Quản lý upload hàng tuần với auto-cleanup
+    - 1 file duy nhất mỗi thời điểm
+    - Auto xóa file cũ khi upload mới
+    - Optimized cho storage
+    """
+    
+    def __init__(self):
+        self.github_token = st.secrets.get("github_token", None)
+        self.github_owner = st.secrets.get("github_owner", None)
+        self.github_repo = st.secrets.get("github_repo", None)
+        
+        # File naming strategy
+        self.current_data_file = "current_dashboard_data.json"
+        self.metadata_file = "upload_metadata.json"
+        self.backup_prefix = "backup_"
+        
+        # Settings
+        self.keep_backups = 2
+        self.max_file_size_mb = 25
+    
+    def check_github_connection(self):
+        """Kiểm tra kết nối GitHub"""
+        if not all([self.github_token, self.github_owner, self.github_repo]):
+            return False, "❌ Chưa cấu hình GitHub credentials"
+        
+        try:
+            url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}"
+            headers = {"Authorization": f"token {self.github_token}"}
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                return True, "✅ GitHub kết nối thành công"
+            else:
+                return False, f"❌ GitHub error: {response.status_code}"
+                
+        except Exception as e:
+            return False, f"❌ Lỗi kết nối: {str(e)}"
+    
+    def get_current_file_info(self):
+        """Lấy thông tin file hiện tại"""
+        try:
+            metadata_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{self.metadata_file}"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            response = requests.get(metadata_url, headers=headers)
+            
+            if response.status_code == 200:
+                file_data = response.json()
+                content = base64.b64decode(file_data['content']).decode()
+                metadata = json.loads(content)
+                return metadata
+            
+        except Exception as e:
+            st.warning(f"Không thể đọc metadata: {str(e)}")
+        
+        return None
+    
+    def create_backup_of_current_file(self):
+        """Backup file hiện tại trước khi xóa"""
+        try:
+            current_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{self.current_data_file}"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            response = requests.get(current_url, headers=headers)
+            
+            if response.status_code == 200:
+                file_data = response.json()
+                
+                current_metadata = self.get_current_file_info()
+                if current_metadata:
+                    upload_time = current_metadata.get('upload_time', datetime.now().isoformat())
+                    backup_timestamp = upload_time[:19].replace(':', '-').replace(' ', '_')
+                else:
+                    backup_timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+                
+                backup_filename = f"{self.backup_prefix}{backup_timestamp}.json"
+                
+                backup_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{backup_filename}"
+                
+                backup_payload = {
+                    "message": f"📦 Backup before new upload - {backup_timestamp}",
+                    "content": file_data['content'],
+                    "branch": "main"
+                }
+                
+                backup_response = requests.put(backup_url, headers=headers, json=backup_payload)
+                
+                if backup_response.status_code == 201:
+                    st.info(f"📦 Đã backup file cũ: {backup_filename}")
+                    return backup_filename
+                    
+        except Exception as e:
+            st.warning(f"Không thể backup file cũ: {str(e)}")
+        
+        return None
+    
+    def cleanup_old_backups(self):
+        """Xóa các backup cũ, chỉ giữ lại số lượng nhất định"""
+        try:
+            contents_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            response = requests.get(contents_url, headers=headers)
+            
+            if response.status_code == 200:
+                files = response.json()
+                
+                backup_files = [f for f in files if f['name'].startswith(self.backup_prefix)]
+                backup_files.sort(key=lambda x: x['name'], reverse=True)
+                files_to_delete = backup_files[self.keep_backups:]
+                
+                deleted_count = 0
+                for file_to_delete in files_to_delete:
+                    try:
+                        delete_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{file_to_delete['name']}"
+                        
+                        delete_payload = {
+                            "message": f"🗑️ Auto cleanup old backup: {file_to_delete['name']}",
+                            "sha": file_to_delete['sha'],
+                            "branch": "main"
+                        }
+                        
+                        delete_response = requests.delete(delete_url, headers=headers, json=delete_payload)
+                        
+                        if delete_response.status_code == 200:
+                            deleted_count += 1
+                            
+                    except Exception as e:
+                        continue
+                
+                if deleted_count > 0:
+                    st.info(f"🗑️ Đã xóa {deleted_count} backup cũ")
+                    
+        except Exception as e:
+            st.warning(f"Không thể cleanup backups: {str(e)}")
+    
+    def upload_new_file(self, data, filename):
+        """Upload file mới với auto-cleanup"""
+        
+        try:
+            connected, message = self.check_github_connection()
+            if not connected:
+                st.error(message)
+                return False
+            
+            st.info("🔄 Bắt đầu upload file mới...")
+            
+            with st.spinner("📦 Đang backup file cũ..."):
+                backup_filename = self.create_backup_of_current_file()
+            
+            with st.spinner("📊 Đang chuẩn bị dữ liệu..."):
+                new_data_package = {
+                    'data': data.to_dict('records'),
+                    'columns': list(data.columns),
+                    'metadata': {
+                        'filename': filename,
+                        'upload_time': datetime.now().isoformat(),
+                        'week_number': datetime.now().isocalendar()[1],
+                        'year': datetime.now().year,
+                        'row_count': len(data),
+                        'file_size_mb': round(len(str(data)) / (1024*1024), 2),
+                        'uploader': 'weekly_admin',
+                        'replaced_backup': backup_filename
+                    }
+                }
+                
+                json_content = json.dumps(new_data_package, ensure_ascii=False, indent=2)
+                size_mb = len(json_content.encode()) / (1024*1024)
+                
+                if size_mb > self.max_file_size_mb:
+                    st.error(f"❌ File quá lớn ({size_mb:.1f}MB). Giới hạn {self.max_file_size_mb}MB")
+                    return False
+            
+            with st.spinner("☁️ Đang upload file mới..."):
+                content_encoded = base64.b64encode(json_content.encode()).decode()
+                
+                current_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{self.current_data_file}"
+                headers = {"Authorization": f"token {self.github_token}"}
+                
+                current_response = requests.get(current_url, headers=headers)
+                current_sha = None
+                if current_response.status_code == 200:
+                    current_sha = current_response.json()['sha']
+                
+                upload_payload = {
+                    "message": f"📊 Weekly data update - Tuần {new_data_package['metadata']['week_number']}/{new_data_package['metadata']['year']}",
+                    "content": content_encoded,
+                    "branch": "main"
+                }
+                
+                if current_sha:
+                    upload_payload["sha"] = current_sha
+                
+                upload_response = requests.put(current_url, headers=headers, json=upload_payload)
+                
+                if upload_response.status_code not in [200, 201]:
+                    st.error(f"❌ Lỗi upload: {upload_response.status_code}")
+                    return False
+            
+            with st.spinner("📝 Đang cập nhật metadata..."):
+                self.update_metadata(new_data_package['metadata'])
+            
+            with st.spinner("🗑️ Đang dọn dẹp backup cũ..."):
+                self.cleanup_old_backups()
+            
+            st.success(f"""
+            🎉 **UPLOAD THÀNH CÔNG!**
+            
+            ✅ **File mới:** {filename}
+            ✅ **Dữ liệu:** {len(data):,} dòng ({size_mb:.1f}MB)
+            ✅ **Tuần:** {new_data_package['metadata']['week_number']}/{new_data_package['metadata']['year']}
+            ✅ **Backup:** {backup_filename if backup_filename else 'Không có file cũ'}
+            
+            📱 **Sếp có thể xem ngay trên điện thoại!**
+            """)
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Lỗi upload: {str(e)}")
+            return False
+    
+    def update_metadata(self, metadata):
+        """Cập nhật file metadata"""
+        try:
+            metadata_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{self.metadata_file}"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            current_response = requests.get(metadata_url, headers=headers)
+            current_sha = None
+            if current_response.status_code == 200:
+                current_sha = current_response.json()['sha']
+            
+            metadata_content = json.dumps(metadata, ensure_ascii=False, indent=2)
+            content_encoded = base64.b64encode(metadata_content.encode()).decode()
+            
+            payload = {
+                "message": f"📝 Update metadata - Tuần {metadata['week_number']}/{metadata['year']}",
+                "content": content_encoded,
+                "branch": "main"
+            }
+            
+            if current_sha:
+                payload["sha"] = current_sha
+            
+            requests.put(metadata_url, headers=headers, json=payload)
+            
+        except Exception as e:
+            st.warning(f"Không thể update metadata: {str(e)}")
+    
+    def load_current_data(self):
+        """Load dữ liệu hiện tại"""
+        try:
+            current_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents/{self.current_data_file}"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            response = requests.get(current_url, headers=headers)
+            
+            if response.status_code == 200:
+                file_data = response.json()
+                content = base64.b64decode(file_data['content']).decode()
+                data_package = json.loads(content)
+                
+                df = pd.DataFrame(data_package['data'], columns=data_package['columns'])
+                
+                return df, data_package['metadata']
+            
+        except Exception as e:
+            st.warning(f"Không thể load dữ liệu: {str(e)}")
+        
+        return None, None
+    
+    def get_storage_info(self):
+        """Lấy thông tin storage usage"""
+        try:
+            contents_url = f"https://api.github.com/repos/{self.github_owner}/{self.github_repo}/contents"
+            headers = {"Authorization": f"token {self.github_token}"}
+            
+            response = requests.get(contents_url, headers=headers)
+            
+            if response.status_code == 200:
+                files = response.json()
+                
+                total_size = sum(f.get('size', 0) for f in files)
+                backup_files = [f for f in files if f['name'].startswith(self.backup_prefix)]
+                
+                return {
+                    'total_files': len(files),
+                    'backup_files': len(backup_files),
+                    'total_size_mb': round(total_size / (1024*1024), 2),
+                    'files': files
+                }
+                
+        except Exception as e:
+            pass
+        
+        return None
+
+# ================== PIVOT TABLE DASHBOARD CLASS (FULL ORIGINAL) ==================
 class PivotTableDashboard:
     def __init__(self):
         self.data = None
