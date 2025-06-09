@@ -639,7 +639,42 @@ class PivotTableDashboard:
             st.error(f"Lỗi khi đọc file: {str(e)}")
             return False
     
-    
+    def load_data_from_dataframe(self, df):
+        """Load dữ liệu từ DataFrame đã có (cho weekly upload)"""
+        try:
+            if df is None or df.empty:
+                return False
+            
+            self.data = df.copy()
+            self.data.columns = self.data.columns.str.strip()
+            
+            # Chuyển đổi kiểu dữ liệu
+            self.data['Tuần'] = pd.to_numeric(self.data['Tuần'], errors='coerce')
+            self.data['Tháng'] = pd.to_numeric(self.data['Tháng'], errors='coerce')
+            self.data['Số liệu'] = pd.to_numeric(self.data['Số liệu'], errors='coerce')
+            
+            # Thêm cột năm nếu chưa có
+            if 'Năm' not in self.data.columns:
+                self.data['Năm'] = datetime.now().year
+            
+            # Tạo cột Quý từ Tháng
+            self.data['Quý'] = ((self.data['Tháng'] - 1) // 3) + 1
+            
+            # Tạo cột kết hợp để dễ filter
+            self.data['Tháng_Năm'] = self.data.apply(lambda x: f"T{int(x['Tháng'])}/{int(x['Năm'])}", axis=1)
+            self.data['Tuần_Tháng'] = self.data.apply(lambda x: f"W{int(x['Tuần'])}-T{int(x['Tháng'])}", axis=1)
+            
+            # ÁP DỤNG THỨ TỰ ƯU TIÊN
+            self._apply_priority_order()
+            
+            # TÍNH TỶ LỆ SO VỚI TUẦN TRƯỚC
+            self._calculate_week_over_week_ratio()
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"Lỗi khi xử lý DataFrame: {str(e)}")
+            return False
     
     def _apply_priority_order(self):
         """Áp dụng thứ tự ưu tiên cho danh mục và nội dung"""
@@ -1698,6 +1733,7 @@ def main():
         - 🔒 Cột "Nội dung" và "Tổng" đóng băng khi scroll
         - 📊 Sparkline xu hướng cho từng danh mục
         - 💾 Xuất báo cáo Excel đa sheet và CSV
+        - ☁️ Tự động sync với GitHub storage
         
         **👨‍💻 Phát triển bởi:** Dương Hữu Quang - Phòng Hành Chính
         **📅 Phiên bản:** 1.0 - 2025
@@ -1718,50 +1754,96 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Khởi tạo dashboard
+    # Khởi tạo dashboard và WeeklyUploadManager
     dashboard = PivotTableDashboard()
     
-    # Load dữ liệu
-    st.sidebar.header("📁 Dữ liệu")
+    # Initialize weekly manager để load dữ liệu từ GitHub
+    if 'weekly_manager' not in st.session_state:
+        st.session_state.weekly_manager = WeeklyUploadManager()
     
-    # Chọn cách nhập dữ liệu
-    data_source = st.sidebar.radio(
-        "Chọn nguồn dữ liệu",
-        ["Upload file", "Nhập đường dẫn file"]
-    )
+    manager = st.session_state.weekly_manager
     
-    file_loaded = False
+    # PHẦN MỚI: Tự động load dữ liệu từ GitHub
+    st.sidebar.header("📁 Nguồn dữ liệu")
     
-    if data_source == "Upload file":
-        uploaded_file = st.sidebar.file_uploader("Chọn file Excel", type=['xlsx', 'xls'])
-        if uploaded_file is not None:
-            if dashboard.load_data(uploaded_file):
-                st.sidebar.success("✅ Đã tải dữ liệu thành công!")
-                file_loaded = True
+    # Kiểm tra kết nối GitHub
+    connected, status_msg = manager.check_github_connection()
+    
+    if connected:
+        st.sidebar.success("☁️ Kết nối GitHub thành công")
+        
+        # Thử load dữ liệu từ GitHub trước
+        try:
+            github_data, metadata = manager.load_current_data()
+            
+            if github_data is not None and metadata:
+                # Có dữ liệu từ GitHub
+                st.sidebar.info(f"""
+                📊 **Dữ liệu từ GitHub:**
+                - 📄 {metadata.get('filename', 'Unknown')}
+                - 📅 Tuần {metadata.get('week_number', '?')}/{metadata.get('year', '?')}
+                - 📈 {metadata.get('row_count', 0):,} dòng
+                """)
+                
+                # Load vào dashboard
+                if dashboard.load_data_from_dataframe(github_data):
+                    st.sidebar.success("✅ Đã tải dữ liệu từ GitHub!")
+                    file_loaded = True
+                else:
+                    st.sidebar.warning("⚠️ Lỗi xử lý dữ liệu GitHub")
+                    file_loaded = False
+            else:
+                st.sidebar.warning("📭 Chưa có dữ liệu trên GitHub")
+                file_loaded = False
+                
+        except Exception as github_error:
+            st.sidebar.error(f"❌ Lỗi load GitHub: {str(github_error)}")
+            file_loaded = False
     else:
-        # Nhập đường dẫn file
-        file_path = st.sidebar.text_input(
-            "Đường dẫn file Excel",
-            value="",
-            help="Để trống và sử dụng Upload file ở trên"
+        st.sidebar.warning("⚠️ Không kết nối được GitHub")
+        file_loaded = False
+    
+    # Nếu không có dữ liệu từ GitHub, cho phép upload file
+    if not file_loaded:
+        st.sidebar.header("📁 Upload dữ liệu thủ công")
+        
+        # Chọn cách nhập dữ liệu
+        data_source = st.sidebar.radio(
+            "Chọn nguồn dữ liệu",
+            ["Upload file", "Nhập đường dẫn file"]
         )
         
-        if st.sidebar.button("Tải file", use_container_width=True):
-            if os.path.exists(file_path):
-                if dashboard.load_data(file_path):
+        if data_source == "Upload file":
+            uploaded_file = st.sidebar.file_uploader("Chọn file Excel", type=['xlsx', 'xls'])
+            if uploaded_file is not None:
+                if dashboard.load_data(uploaded_file):
                     st.sidebar.success("✅ Đã tải dữ liệu thành công!")
                     file_loaded = True
-                    # Lưu đường dẫn vào session state
-                    st.session_state['file_path'] = file_path
-            else:
-                st.sidebar.error(f"❌ Không tìm thấy file: {file_path}")
-        
-        # Tự động load lại nếu đã có đường dẫn trong session
-        if 'file_path' in st.session_state:
-            if os.path.exists(st.session_state['file_path']):
-                dashboard.load_data(st.session_state['file_path'])
-                file_loaded = True
+        else:
+            # Nhập đường dẫn file
+            file_path = st.sidebar.text_input(
+                "Đường dẫn file Excel",
+                value="",
+                help="Để trống và sử dụng Upload file ở trên"
+            )
+            
+            if st.sidebar.button("Tải file", use_container_width=True):
+                if os.path.exists(file_path):
+                    if dashboard.load_data(file_path):
+                        st.sidebar.success("✅ Đã tải dữ liệu thành công!")
+                        file_loaded = True
+                        # Lưu đường dẫn vào session state
+                        st.session_state['file_path'] = file_path
+                else:
+                    st.sidebar.error(f"❌ Không tìm thấy file: {file_path}")
+            
+            # Tự động load lại nếu đã có đường dẫn trong session
+            if 'file_path' in st.session_state:
+                if os.path.exists(st.session_state['file_path']):
+                    dashboard.load_data(st.session_state['file_path'])
+                    file_loaded = True
     
+    # Phần còn lại của dashboard (chỉ hiển thị khi có dữ liệu)
     if file_loaded and dashboard.data is not None:
         # Tạo các cài đặt và bộ lọc
         report_type, rows, cols, values, agg_func, show_ratio_inline = dashboard.create_pivot_settings()
@@ -1800,7 +1882,16 @@ def main():
         
         # Nút làm mới dữ liệu
         if st.sidebar.button("🔄 Làm mới dữ liệu", use_container_width=True):
-            if 'file_path' in st.session_state:
+            if connected:
+                # Reload từ GitHub
+                try:
+                    github_data, metadata = manager.load_current_data()
+                    if github_data is not None:
+                        dashboard.load_data_from_dataframe(github_data)
+                        st.rerun()
+                except:
+                    pass
+            elif 'file_path' in st.session_state:
                 dashboard.load_data(st.session_state['file_path'])
                 st.rerun()
         
@@ -1844,8 +1935,6 @@ def main():
                         f"pivot_table_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         "text/csv"
                     )
-                
-                # BỎ PHẦN SPARKLINE Ở CUỐI - đã chuyển vào trong từng danh mục
         
         with tab2:
             st.header("Xu hướng theo thời gian (theo thứ tự ưu tiên)")
@@ -2115,9 +2204,10 @@ def main():
             - 🔴 Giảm: "85.000 (↓15%)"
             - ⚪ Không đổi: "100.000 (→0%)"
             
-            **4. Bỏ tổng chung:**
-            - ❌ Không hiển thị tổng của tất cả danh mục
-            - ✅ Chỉ hiển thị tổng theo từng hàng/danh mục
+            **4. Sync với GitHub:**
+            - ☁️ Tự động tải dữ liệu từ GitHub storage
+            - 🔄 Sync với Weekly Upload system
+            - 📱 Truy cập từ mọi thiết bị
             
             #### 📂 **Danh mục theo thứ tự ưu tiên:**
             1. **Văn bản đến** - Quản lý văn bản đến
@@ -2135,11 +2225,12 @@ def main():
             13. **Bãi giữ xe** - Dịch vụ đậu xe
             
             #### 🚀 **Cách sử dụng:**
-            1. **Tải dữ liệu**: Upload file Excel hoặc nhập đường dẫn
-            2. **Chọn báo cáo**: Theo Tuần/Tháng/Quý/Năm
-            3. **Lọc dữ liệu**: Chọn thời gian và danh mục
-            4. **Xem kết quả**: Pivot table với biến động inline
-            5. **Xuất báo cáo**: Excel/CSV với thứ tự ưu tiên
+            1. **Tự động**: Dữ liệu tự động sync từ Weekly Upload
+            2. **Thủ công**: Upload file Excel hoặc nhập đường dẫn nếu cần
+            3. **Chọn báo cáo**: Theo Tuần/Tháng/Quý/Năm
+            4. **Lọc dữ liệu**: Chọn thời gian và danh mục
+            5. **Xem kết quả**: Pivot table với biến động inline
+            6. **Xuất báo cáo**: Excel/CSV với thứ tự ưu tiên
             
             #### 💡 **Lợi ích:**
             - ⚡ **Tự động 100%**: Không cần sắp xếp thủ công
@@ -2147,13 +2238,38 @@ def main():
             - 📊 **Hiển thị đầy đủ**: Không bị mất số liệu
             - 📈 **Biến động trực quan**: Nhìn thấy ngay xu hướng
             - 💾 **Xuất chuyên nghiệp**: Báo cáo đầy đủ thông tin
+            - ☁️ **Sync tự động**: Kết nối với Weekly Upload
             
             #### ⚠️ **Lưu ý:**
             - Dữ liệu cần có cột: Tuần, Tháng, Danh mục, Nội dung, Số liệu
             - Thứ tự ưu tiên đã được cố định, không cần điều chỉnh
             - Biến động chỉ hiển thị từ tuần thứ 2 trở đi
             - Biến động được tính so với tuần liền trước
+            - Dữ liệu sẽ tự động sync từ GitHub nếu có kết nối
             """)
+            
+        # Hiển thị hướng dẫn GitHub nếu chưa kết nối
+        if not connected:
+            with st.expander("🔧 Cấu hình GitHub để sync tự động"):
+                st.markdown("""
+                **Để sử dụng tính năng sync tự động với Weekly Upload:**
+                
+                1. **Tạo GitHub Personal Access Token**:
+                   - Vào GitHub → Settings → Developer settings → Personal access tokens
+                   - Tạo token mới với quyền `repo` và `contents:write`
+                
+                2. **Thêm vào Streamlit Secrets**:
+                   ```
+                   github_token = "ghp_xxxxxxxxxxxx"
+                   github_owner = "your-username"  
+                   github_repo = "your-repo-name"
+                   ```
+                
+                3. **Sau khi cấu hình**:
+                   - Dashboard sẽ tự động load dữ liệu từ GitHub
+                   - Không cần upload file thủ công nữa
+                   - Sync với Weekly Upload system
+                """)
 
 def weekly_dashboard_main():
     """Main function cho weekly upload dashboard - Robust version"""
@@ -2344,18 +2460,6 @@ def weekly_dashboard_main():
     """, unsafe_allow_html=True)
     
 
-# Cuối file - sửa phần này
+# Cuối file
 if __name__ == "__main__":
-    # Thêm sidebar để chọn mode
-    st.sidebar.title("🎛️ Chọn chế độ")
-    
-    mode = st.sidebar.radio(
-        "Chế độ hoạt động:",
-        ["📊 Dashboard chính", "📅 Weekly Upload"],
-        index=0  # Mặc định là Dashboard chính
-    )
-    
-    if mode == "📊 Dashboard chính":
-        main()  # Chạy dashboard chính
-    else:
-        weekly_dashboard_main()  # Chạy weekly upload
+    weekly_dashboard_main()
