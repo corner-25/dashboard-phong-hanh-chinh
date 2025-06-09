@@ -1677,7 +1677,7 @@ def main():
             # Container căn giữa cho logo
             logo_col1, logo_col2, logo_col3 = st.columns([1, 1, 1])
             with logo_col2:
-                st.image(logo_path, width=180, use_column_width=False)
+                st.image(logo_path, width=180, use_container_width=False)
         else:
             # Fallback emoji logo
             st.markdown("<div style='font-size: 6rem; text-align: center; margin: 20px 0;'>🏥</div>", unsafe_allow_html=True)
