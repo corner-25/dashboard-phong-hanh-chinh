@@ -109,7 +109,7 @@ st.markdown("""
         z-index: 10;
         border-right: 2px solid #dee2e6;
         min-width: 250px !important;
-        max-width: 250px !important;
+        max-width: 500px !important;
     }
     .full-width-table th:last-child,
     .full-width-table td:last-child {
@@ -154,7 +154,7 @@ st.markdown("""
     
     .upload-title {
         color: white;
-        font-size: 1.8rem;
+        font-size: 2rem;
         font-weight: bold;
         margin: 0;
     }
@@ -1157,7 +1157,7 @@ class PivotTableDashboard:
                     if isinstance(category_data, pd.DataFrame):
                         # Tạo HTML table để hiển thị đầy đủ số và biến động
                         html_table = "<div class='full-width-table'>"
-                        html_table += "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
+                        html_table += "<table style='width:100%; border-collapse: collapse; font-size: 15px;'>"
                         
                         # Header
                         html_table += "<tr style='background-color: #f0f2f6;'>"
