@@ -1127,7 +1127,7 @@ class PivotTableDashboard:
             st.error(f"Lỗi tạo sparkline cho {category_name}: {str(e)}")
     
     def display_hierarchical_pivot_improved(self, pivot, data):
-        """Hiển thị pivot table với cấu trúc phân cấp cải tiến"""
+        """Hiển thị pivot table với cấu trúc phân cấp cải tiến - Sparkline ở dưới cùng"""
         if pivot is None:
             return
         
@@ -1140,6 +1140,7 @@ class PivotTableDashboard:
             categories = pivot.index.get_level_values('Danh mục').unique()
             sorted_categories = sorted(categories, key=lambda x: self.category_priority.get(x, 999))
             
+            # PHẦN 1: HIỂN THỊ PIVOT TABLE CHO TỪNG DANH MỤC (KHÔNG CÓ SPARKLINE)
             for category in sorted_categories:
                 # Tạo expander cho mỗi danh mục (BỎ HIỂN THỊ SỐ ƯU TIÊN)
                 with st.expander(f"📁 {category}", expanded=True):
@@ -1153,7 +1154,7 @@ class PivotTableDashboard:
                         sorted_contents = sorted(contents, key=lambda x: self.content_priority.get(x, 999))
                         category_data = category_data.reindex(sorted_contents)
                     
-                    # Tạo HTML table để hiển thị đầy đủ số và biến động
+                    # CHỈ HIỂN THỊ BẢNG DỮ LIỆU (KHÔNG CÓ SPARKLINE)
                     if isinstance(category_data, pd.DataFrame):
                         # Tạo HTML table để hiển thị đầy đủ số và biến động
                         html_table = "<div class='full-width-table'>"
@@ -1185,33 +1186,64 @@ class PivotTableDashboard:
                         
                         html_table += "</table></div>"
                         st.markdown(html_table, unsafe_allow_html=True)
+                    
+                    else:
+                        # Nếu là Series
+                        html_table = "<div class='full-width-table'>"
+                        html_table += "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
+                        html_table += "<tr style='background-color: #f0f2f6;'>"
+                        html_table += "<th style='border: 1px solid #ddd; padding: 8px;'>Danh mục</th>"
+                        html_table += "<th style='border: 1px solid #ddd; padding: 8px;'>Giá trị</th>"
+                        html_table += "</tr>"
+                        html_table += "<tr>"
+                        html_table += f"<td style='border: 1px solid #ddd; padding: 8px;'>{category}</td>"
+                        html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right;' class='number-cell'>{category_data}</td>"
+                        html_table += "</tr>"
+                        html_table += "</table></div>"
+                        st.markdown(html_table, unsafe_allow_html=True)
+            
+            # PHẦN 2: HIỂN THỊ SPARKLINE Ở DƯỚI CÙNG RIÊNG BIỆT
+            st.markdown("---")  # Đường phân cách
+            st.subheader("📈 Biểu đồ xu hướng tổng hợp theo từng nội dung")
+            st.markdown("*Xu hướng biến động qua các tuần cho mỗi nội dung công việc*")
+            
+            # Tạo container cho sparklines
+            sparkline_data_all = {}
+            
+            # Thu thập dữ liệu sparkline cho tất cả danh mục
+            for category in sorted_categories:
+                try:
+                    category_data = pivot.xs(category, level='Danh mục')
+                    
+                    if isinstance(category_data, pd.DataFrame):
+                        # Sắp xếp theo thứ tự ưu tiên nội dung
+                        contents = category_data.index.tolist()
+                        sorted_contents = sorted(contents, key=lambda x: self.content_priority.get(x, 999))
+                        category_data = category_data.reindex(sorted_contents)
                         
-                        # SPARKLINE CHO DANH MỤC
-                        st.markdown("**📊 Xu hướng cho danh mục này:**")
+                        # Lưu vào dict chung
+                        sparkline_data_all[category] = {
+                            'data': category_data,
+                            'contents': sorted_contents
+                        }
+                except Exception as e:
+                    continue
+            
+            # Hiển thị sparklines theo danh mục
+            for category in sorted_categories:
+                if category in sparkline_data_all:
+                    with st.expander(f"📊 Xu hướng: {category}", expanded=False):
+                        category_info = sparkline_data_all[category]
+                        category_data = category_info['data']
                         
-                        # Hiển thị sparklines inline cho danh mục này
                         try:
-                            # Header
-                            html_table += "<tr style='background-color: #f0f2f6;'>"
-                            html_table += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; min-width: 250px; position: sticky; left: 0; background-color: #f0f2f6; z-index: 10;'>Nội dung</th>"
-                            html_table += "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; min-width: 150px;'>Xu hướng</th>"
-                            html_table += "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; min-width: 120px; position: sticky; right: 0; background-color: #f0f2f6; z-index: 10;'>Tổng hàng</th>"
-                            html_table += "</tr>"
+                            # Header cho bảng sparkline
+                            st.markdown("**📊 Xu hướng biến động cho từng nội dung:**")
                             
-                            # Tạo bảng HTML cho sparklines
-                            sparkline_html = "<div class='full-width-table'>"
-                            sparkline_html += "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
-                            
-                            # Header
-                            sparkline_html += "<tr style='background-color: #f0f2f6;'>"
-                            sparkline_html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: left; min-width: 250px; position: sticky; left: 0; background-color: #f0f2f6; z-index: 10;'>Nội dung</th>"
-                            sparkline_html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; min-width: 150px;'>Xu hướng</th>"
-                            sparkline_html += "<th style='border: 1px solid #ddd; padding: 8px; text-align: center; min-width: 120px; position: sticky; right: 0; background-color: #f0f2f6; z-index: 10;'>Tổng hàng</th>"
-                            sparkline_html += "</tr>"
-                            
+                            # Tạo bảng sparkline cho danh mục này
                             sparkline_rows = []
                             
-                            for content in category_data.index:
+                            for content in category_info['contents']:
                                 # Lấy dữ liệu cho nội dung này
                                 content_values = []
                                 for col in category_data.columns:
@@ -1267,52 +1299,47 @@ class PivotTableDashboard:
                                 # Lấy tổng hàng từ cột Tổng
                                 row_total = category_data.loc[content, 'Tổng'] if 'Tổng' in category_data.columns else sum(content_values)
                                 
-                                # Tạo row cho bảng và lưu figure
+                                # Lưu vào danh sách
                                 sparkline_rows.append({
                                     'content': content,
                                     'fig': fig,
-                                    'total': row_total
+                                    'total': row_total,
+                                    'values': content_values
                                 })
                             
-                            # Kết thúc HTML table header
-                            sparkline_html += "</table></div>"
-                            st.markdown(sparkline_html, unsafe_allow_html=True)
-                            
-                            # Hiển thị từng row với sparkline
+                            # Hiển thị từng row với sparkline trong layout 3 cột
                             for row_data in sparkline_rows:
                                 col1, col2, col3 = st.columns([3, 2, 1])
+                                
                                 with col1:
                                     st.markdown(f"📄 {row_data['content']}")
+                                
                                 with col2:
-                                    st.plotly_chart(row_data['fig'], use_container_width=True, key=f"spark_{category}_{row_data['content']}")
+                                    st.plotly_chart(row_data['fig'], use_container_width=True, 
+                                                key=f"spark_{category}_{row_data['content']}")
+                                
                                 with col3:
                                     if isinstance(row_data['total'], str):
                                         st.markdown(f"**{row_data['total']}**")
                                     else:
                                         st.markdown(f"**{row_data['total']:,.0f}**".replace(',', '.'))
+                            
+                            # Thống kê tổng quan cho danh mục
+                            total_category = sum([sum(row['values']) for row in sparkline_rows])
+                            avg_per_content = total_category / len(sparkline_rows) if sparkline_rows else 0
+                            
+                            st.info(f"""
+                            📊 **Tổng quan {category}:**
+                            - 📈 Tổng cộng: {total_category:,.0f}
+                            - 📊 Trung bình/nội dung: {avg_per_content:,.0f}
+                            - 📋 Số nội dung: {len(sparkline_rows)}
+                            """.replace(',', '.'))
                                     
                         except Exception as e:
                             st.error(f"Lỗi tạo sparkline cho {category}: {str(e)}")
-                        
-                    else:
-                        # Nếu là Series
-                        html_table = "<div class='full-width-table'>"
-                        html_table += "<table style='width:100%; border-collapse: collapse; font-size: 12px;'>"
-                        html_table += "<tr style='background-color: #f0f2f6;'>"
-                        html_table += "<th style='border: 1px solid #ddd; padding: 8px;'>Danh mục</th>"
-                        html_table += "<th style='border: 1px solid #ddd; padding: 8px;'>Giá trị</th>"
-                        html_table += "</tr>"
-                        html_table += "<tr>"
-                        html_table += f"<td style='border: 1px solid #ddd; padding: 8px;'>{category}</td>"
-                        html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right;' class='number-cell'>{category_data}</td>"
-                        html_table += "</tr>"
-                        html_table += "</table></div>"
-                        st.markdown(html_table, unsafe_allow_html=True)
-                    
-                    # BỎ TỔNG THEO DANH MỤC - chỉ giữ tổng theo nội dung (hàng)
         
         elif 'Danh mục' in pivot.index.names:
-            # Hiển thị pivot table đơn giản với Danh mục
+            # Hiển thị pivot table đơn giản với Danh mục (giữ nguyên)
             st.subheader("📊 Pivot Table theo Danh mục (theo thứ tự ưu tiên)")
             
             # Nhóm theo danh mục và sắp xếp theo thứ tự ưu tiên
@@ -1357,7 +1384,7 @@ class PivotTableDashboard:
                         st.markdown(html_table, unsafe_allow_html=True)
         
         else:
-            # Hiển thị pivot table thông thường
+            # Hiển thị pivot table thông thường (giữ nguyên)
             st.subheader("📊 Pivot Table")
             
             # Tạo HTML table cho pivot thông thường
@@ -1391,9 +1418,6 @@ class PivotTableDashboard:
                     html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right;' class='number-cell'>{value_formatted}</td>"
                     html_table += "</tr>"
             
-            html_table += "</table></div>"
-            st.markdown(html_table, unsafe_allow_html=True)
-    
             html_table += "</table></div>"
             st.markdown(html_table, unsafe_allow_html=True)
     
