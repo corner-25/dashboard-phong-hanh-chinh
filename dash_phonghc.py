@@ -55,12 +55,13 @@ st.markdown("""
         padding: 0;
     }
     .category-header {
-        background-color: #f0f2f6;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 5px 0;
-        border-left: 4px solid #1f77b4;
+        background-color: #e7f1ff;          /* gentle highlight */
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin: 8px 0 12px 0;
+        border-left: 6px solid #1f77b4;
         font-weight: bold;
+        font-size: 1.25rem;
     }
     .sub-category {
         padding-left: 20px;
@@ -1134,7 +1135,6 @@ class PivotTableDashboard:
         # Kiểm tra xem có phải pivot table với Danh mục không
         if isinstance(pivot.index, pd.MultiIndex) and 'Danh mục' in pivot.index.names:
             # Hiển thị theo cấu trúc phân cấp
-            st.subheader("📊 Pivot Table theo thứ tự ưu tiên (có biến động)")
             
             # Lấy danh sách các danh mục theo thứ tự ưu tiên
             categories = pivot.index.get_level_values('Danh mục').unique()
@@ -1142,8 +1142,10 @@ class PivotTableDashboard:
             
             # PHẦN 1: HIỂN THỊ PIVOT TABLE CHO TỪNG DANH MỤC (KHÔNG CÓ SPARKLINE)
             for category in sorted_categories:
-                # Tạo expander cho mỗi danh mục (BỎ HIỂN THỊ SỐ ƯU TIÊN)
-                with st.expander(f"📁 {category}", expanded=True):
+                # Expander without label; we'll render a custom styled header inside
+                with st.expander("", expanded=True):
+                    # Category title: bigger, bold, subtle background
+                    st.markdown(f"<div class='category-header'>📁 {category}</div>", unsafe_allow_html=True)
                     # Lọc dữ liệu cho danh mục này
                     category_data = pivot.xs(category, level='Danh mục')
                     
@@ -1178,9 +1180,11 @@ class PivotTableDashboard:
                             for col in category_data.columns:
                                 value = category_data.loc[content, col]
                                 if col == 'Tổng':
-                                    html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right; position: sticky; right: 0; background-color: #e9ecef; z-index: 10; font-weight: bold;' class='number-cell'>{value}</td>"
+                                    formatted_value = f"{value:,.0f}".replace(",", ".") if isinstance(value, (int, float, np.integer, np.floating)) else str(value)
+                                    html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right; position: sticky; right: 0; background-color: #e9ecef; z-index: 10; font-weight: bold;' class='number-cell'>{formatted_value}</td>"
                                 else:
-                                    html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right;' class='number-cell'>{value}</td>"
+                                    formatted_value = f"{valdisplay_hierarchical_pivot_improvedue:,.0f}".replace(",", ".") if isinstance(value, (int, float, np.integer, np.floating)) else str(value)
+                                    html_table += f"<td style='border: 1px solid #ddd; padding: 8px; text-align: right;' class='number-cell'>{formatted_value}</td>"
                             
                             html_table += "</tr>"
                         
@@ -1340,7 +1344,7 @@ class PivotTableDashboard:
         
         elif 'Danh mục' in pivot.index.names:
             # Hiển thị pivot table đơn giản với Danh mục (giữ nguyên)
-            st.subheader("📊 Pivot Table theo Danh mục (theo thứ tự ưu tiên)")
+            
             
             # Nhóm theo danh mục và sắp xếp theo thứ tự ưu tiên
             categories = pivot.index.unique()
@@ -1686,79 +1690,73 @@ class PivotTableDashboard:
             return None
 
 def main():
-    # HEADER VỚI LOGO THẬT - CĂNG GIỮA HOÀN HẢO
-    st.markdown("""
-    <div style='text-align: center; padding: 30px 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 15px; margin-bottom: 30px;'>
-    """, unsafe_allow_html=True)
-    
-    # Tự động tìm đường dẫn đúng
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    logo_path = os.path.join(script_dir, "assets", "logo.png")
-    
-    # Hiển thị logo từ file - CĂNG GIỮA HOÀN HẢO
+    # HEADER: logo + title on one line (flexbox)
     try:
+        # Encode logo to base64 for inline <img>
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(script_dir, "assets", "logo.png")
+        logo_base64 = ""
         if os.path.exists(logo_path):
-            # Container căn giữa cho logo
-            logo_col1, logo_col2, logo_col3 = st.columns([1, 1, 1])
-            with logo_col2:
-                st.image(logo_path, width=30, use_container_width=True)
-        else:
-            # Fallback emoji logo
-            st.markdown("<div style='font-size: 6rem; text-align: center; margin: 20px 0;'>🏥</div>", unsafe_allow_html=True)
-    except Exception as e:
-        # Fallback emoji logo
-        st.markdown("<div style='font-size: 6rem; text-align: center; margin: 20px 0;'>🏥</div>", unsafe_allow_html=True)
-    
-    # Title căn giữa hoàn hảo
-    st.markdown("""
+            with open(logo_path, "rb") as f:
+                logo_base64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        logo_base64 = ""
+
+    header_html = f"""
+    <div style='
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:12px;
+        padding:30px 0;
+        background:linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius:15px;
+        margin-bottom:30px;
+    '>
+        <img src='data:image/png;base64,{logo_base64}' style='height:64px; width:auto;' />
         <h1 style='
-            text-align: center; 
-            color: #1f77b4; 
-            margin: 20px 0 10px 0; 
-            font-size: 3.2rem; 
-            font-weight: bold;
-            font-family: "Segoe UI", Arial, sans-serif;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-            letter-spacing: 1px;
-        '>
-            DASHBOARD PHÒNG HÀNH CHÍNH
-        </h1>
-    """, unsafe_allow_html=True)
+            color:#1f77b4;
+            margin:0;
+            font-size:2.7rem;
+            font-weight:bold;
+            font-family:"Segoe UI", Arial, sans-serif;
+            text-shadow:2px 2px 4px rgba(0,0,0,0.1);
+            letter-spacing:1px;
+        '>DASHBOARD PHÒNG HÀNH CHÍNH</h1>
+    </div>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
     
-    # Đóng container
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Thêm thông tin project
+    # Footer gọn gàng – gom toàn bộ thông tin dự án vào một expander cuối trang
+    st.markdown("---")
     with st.expander("ℹ️ Thông tin về Dashboard", expanded=False):
+        # Giới thiệu và tính năng
         st.markdown("""
         **🏥 Dashboard chuyên biệt cho Phòng Hành Chính Bệnh viện**
-        
+
         **✨ Tính năng nổi bật:**
-        - 📋 13 danh mục và 70+ nội dung theo thứ tự ưu tiên cố định
-        - 📈 Hiển thị biến động tuần (%) ngay trong giá trị: `1.234.567 (↑15%)`
-        - 🔒 Cột "Nội dung" và "Tổng" đóng băng khi scroll
-        - 📊 Sparkline xu hướng cho từng danh mục
-        - 💾 Xuất báo cáo Excel đa sheet và CSV
-        - ☁️ Tự động sync với GitHub storage
-        
-        **👨‍💻 Phát triển bởi:** Dương Hữu Quang - Phòng Hành Chính
-        **📅 Phiên bản:** 1.0 - 2025
-        **🌐 GitHub:** https://github.com/corner-25/dashboard-phong-hanh-chinh
+        - 📋 13 danh mục và 70+ nội dung theo thứ tự ưu tiên cố định  
+        - 📈 Hiển thị biến động tuần (%) ngay trong giá trị: `1.234.567 (↑15%)`  
+        - 🔒 Cột **Nội dung** và **Tổng** đóng băng khi cuộn  
+        - 📊 Sparkline xu hướng cho từng danh mục  
+        - 💾 Xuất báo cáo Excel đa sheet và CSV  
+        - ☁️ Tự động sync với GitHub storage  
         """)
-    
-    # Footer chuyên nghiệp
-    st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: #666; padding: 15px; background-color: #f8f9fa; border-radius: 10px; margin-top: 20px;'>
-        <p style='margin: 0; font-size: 14px;'>
-            🏥 <strong>Phòng Hành Chính - Bệnh viện Đại học Y Dược TPHCM - University Medical Center HCMC (UMC) </strong> | 
-            🌐 <a href="https://github.com/corner-25/dashboard-phong-hanh-chinh" target="_blank" style="text-decoration: none; color: #1f77b4;">GitHub Project</a>
-        </p>
-        <p style='margin: 5px 0 0 0; font-size: 12px; color: #888;'>
-            © 2025 Dashboard Phòng Hành Chính - Phát triển bởi <strong>Dương Hữu Quang</strong>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+        # Thông tin bản quyền + GitHub
+        st.markdown("""
+        <div style='text-align: center; color: #666; padding: 15px; background-color:rgba(255, 255, 255, 0.08);
+                    border-radius: 10px; margin-top: 20px;'>
+            <p style='margin: 0; font-size: 14px;'>
+                🏥 <strong>Phòng Hành Chính - Bệnh viện Đại học Y Dược TPHCM - University Medical Center HCMC (UMC)</strong>
+                &nbsp;|&nbsp;
+                🌐 <a href="https://github.com/corner-25/dashboard-phong-hanh-chinh" target="_blank"
+                      style="text-decoration: none; color: #1f77b4;">GitHub Project</a>
+            </p>
+            <p style='margin: 5px 0 0 0; font-size: 12px; color: #888;'>
+                © 2025 Dashboard Phòng Hành Chính — Phát triển bởi <strong>Dương Hữu Quang</strong>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Khởi tạo dashboard và WeeklyUploadManager
     dashboard = PivotTableDashboard()
@@ -1905,8 +1903,6 @@ def main():
         tab1, tab2, tab3 = st.tabs(["📋 Pivot Table", "📊 Xu hướng theo thời gian", "💾 Xuất báo cáo"])
         
         with tab1:
-            st.header("Pivot Table với biến động inline")
-            
             # Tạo pivot table với biến động
             pivot = dashboard.create_hierarchical_pivot_table_with_ratio(
                 filtered_data, rows, cols, values, agg_func, show_ratio_inline
